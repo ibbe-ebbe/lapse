@@ -1,1 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Registry Search</title>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+<style>
+:root{--bg:#f2f2f2;--card:#fff;--ink:#111;--mut:#777;--line:#e2e2e2;--acc:#111}
+@media (prefers-color-scheme:dark){:root{--bg:#111;--card:#1c1c1c;--ink:#f2f2f2;--mut:#999;--line:#333;--acc:#f2f2f2}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+main{max-width:520px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:8px 0 16px}
+.card{background:var(--card);border-radius:16px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.row{display:flex;gap:8px;margin-bottom:8px}
+input{flex:1;font:20px ui-monospace,Menlo,monospace;text-transform:uppercase;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:transparent;color:var(--ink)}
+button{font:inherit;border:0;border-radius:999px;padding:10px 18px;background:var(--acc);color:var(--bg);cursor:pointer}
+button.ghost{background:transparent;color:var(--mut);border:1px dashed var(--mut)}
+button:disabled{opacity:.5}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.tab{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.tab.on{background:var(--acc);color:var(--bg)}
+.res{display:flex;align-items:center;gap:14px;border-left:4px solid var(--ink)}
+.n{color:var(--mut);font:13px ui-monospace,monospace;min-width:34px}
+.id{font:600 22px ui-monospace,Menlo,monospace}
+.st{color:var(--mut)}
+.lock{margin-left:auto;opacity:.4}
+#meta{color:var(--mut);font:13px ui-monospace,monospace;margin:4px 0 8px}
+#err{color:#c0392b;min-height:20px}
+</style>
+</head>
+<body>
+<main>
+<h1>Registry Search</h1>
+<div class="card">
+  <div id="inputs"><div class="row"><input maxlength="7" placeholder="A123456" autocomplete="off"></div></div>
+  <button class="ghost" id="add" type="button">+ Add another ID</button>
+  <div id="cf" style="margin:12px 0"></div>
+  <button id="go" type="button" disabled>Search</button>
+  <div id="err"></div>
+</div>
+<div id="meta"></div>
+<div class="tabs" id="tabs"></div>
+<div id="out"></div>
+</main>
+<script>
+// ===== SET THESE TWO =====
+const API = "PASTE_APPS_SCRIPT_WEB_APP_URL";
+const SITEKEY = "PASTE_TURNSTILE_SITE_KEY";
+// =========================
+const $ = id => document.getElementById(id);
+let token = "", wid = null, data = [], filter = "All";
+
+window.addEventListener("load", () => {
+  const t = setInterval(() => {
+    if (!window.turnstile) return;
+    clearInterval(t);
+    wid = turnstile.render("#cf", {sitekey: SITEKEY, callback: tk => {token = tk; $("go").disabled = false;},
+      "expired-callback": () => {token = ""; $("go").disabled = true;}});
+  }, 200);
+});
+
+$("add").onclick = () => {
+  if ($("inputs").children.length >= 10) return;
+  const d = document.createElement("div"); d.className = "row";
+  d.innerHTML = '<input maxlength="7" placeholder="A123456" autocomplete="off">';
+  $("inputs").appendChild(d);
+};
+
+$("go").onclick = async () => {
+  $("err").textContent = "";
+  const ids = [...document.querySelectorAll("#inputs input")].map(i => i.value.trim().toUpperCase()).filter(Boolean);
+  if (!ids.length) { $("err").textContent = "Enter an ID."; return; }
+  if (ids.some(i => !/^A\d{6}$/.test(i))) { $("err").textContent = "ID format: A + 6 digits."; return; }
+  $("go").disabled = true;
+  try {
+    const r = await fetch(API, {method: "POST", body: JSON.stringify({ids: [...new Set(ids)], token})});
+    const j = await r.json();
+    if (j.error) throw new Error(j.error === "captcha" ? "CAPTCHA failed, try again." : "Request failed.");
+    data = j.results; filter = "All";
+    const d = new Date(j.updated);
+    $("meta").textContent = "Registry updated " + d.toLocaleString([], {day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"});
+    render();
+  } catch (e) { $("err").textContent = e.message || "Request failed."; }
+  token = ""; turnstile.reset(wid);
+};
+
+function render() {
+  const counts = {}; data.forEach(r => counts[r.status] = (counts[r.status] || 0) + 1);
+  $("tabs").replaceChildren(...["All", ...Object.keys(counts)].map(s => {
+    const b = document.createElement("button");
+    b.className = "tab" + (s === filter ? " on" : "");
+    b.textContent = s + " " + (s === "All" ? data.length : counts[s]);
+    b.onclick = () => { filter = s; render(); };
+    return b;
+  }));
+  $("out").replaceChildren(...data.filter(r => filter === "All" || r.status === filter).map(r => {
+    const c = document.createElement("div"); c.className = "card res";
+    const n = document.createElement("span"); n.className = "n"; n.textContent = r.n || "–";
+    const w = document.createElement("div");
+    const i = document.createElement("div"); i.className = "id"; i.textContent = r.id;
+    const s = document.createElement("div"); s.className = "st"; s.textContent = r.status;
+    w.append(i, s);
+    const l = document.createElement("span"); l.className = "lock"; l.textContent = "🔒";
+    c.append(n, w, l);
+    return c;
+  }));
+}
+</script>
+</body>
+</html>
 
