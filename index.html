@@ -2,71 +2,51 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lapse Search</title>
 <style>
-*{box-sizing:border-box}
-body{margin:0;background:#fff;color:#111;font:16px system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+body{margin:0;background:#fff;color:#111;font:16px system-ui,sans-serif}
 main{max-width:520px;margin:0 auto;padding:16px}
-h1{font-size:22px;margin:8px 0 4px}
-#meta{color:#777;font:13px ui-monospace,monospace;margin-bottom:16px}
-.row{display:flex;gap:8px;margin-bottom:12px}
-input{flex:1;min-width:0;font:20px ui-monospace,Menlo,monospace;text-transform:uppercase;padding:12px;border:1px solid #ddd;border-radius:12px;background:#fff;color:#111}
-button{font:inherit;border:0;border-radius:12px;padding:12px 20px;background:#111;color:#fff;cursor:pointer}
-button:disabled{opacity:.5}
-#err{color:#c0392b;min-height:20px}
-.res{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #eee;border-left:4px solid #111;border-radius:16px;padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
-.n{color:#777;font:13px ui-monospace,monospace;min-width:34px}
-.id{font:600 22px ui-monospace,Menlo,monospace}
-.st{color:#777}
-.lock{margin-left:auto;opacity:.4}
+h1{font-size:22px}
+.row{display:flex;gap:8px}
+input{flex:1;min-width:0;font:20px monospace;text-transform:uppercase;padding:12px;border:1px solid #ddd;border-radius:12px}
+button{font:inherit;border:0;border-radius:12px;padding:12px 20px;background:#111;color:#fff}
+#out{margin-top:16px;padding:14px 16px;border:1px solid #eee;border-left:4px solid #111;border-radius:16px;display:none}
+#id{font:600 22px monospace}
+#st{color:#777}
 </style>
 </head>
 <body>
 <main>
 <h1>Lapse Search</h1>
-<div id="meta"></div>
 <div class="row">
-  <input id="id" maxlength="7" placeholder="A123456" autocomplete="off">
-  <button id="go" type="button">Search</button>
+  <input id="q" maxlength="7" placeholder="A123456">
+  <button onclick="go()">Search</button>
 </div>
-<div id="err"></div>
-<div id="out"></div>
+<div id="out"><div id="id"></div><div id="st"></div></div>
 </main>
 <script>
-const $ = id => document.getElementById(id);
-let DB = null;
+// Published CSV link of your sheet tab (File > Share > Publish to web > CSV)
+const CSV = "https://docs.google.com/spreadsheets/d/1n9g53Gs6vb_i5mU4XDMRuusjPHODDa8CSm_p8wMHOyE/gviz/tq?tqx=out:csv";
+const ID_COL = 3;      // column D
+const STATUS_COL = 5;  // column F (optional)
 
-fetch("data.json").then(r => r.json()).then(j => {
-  DB = j;
-  $("meta").textContent = "Registry updated " + new Date(j.updated).toLocaleString([], {day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
-}).catch(() => $("err").textContent = "Data not available.");
-
-async function hash(id) {
-  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(id), "PBKDF2", false, ["deriveBits"]);
-  const salt = Uint8Array.from(DB.salt.match(/../g).map(h => parseInt(h, 16)));
-  const b = await crypto.subtle.deriveBits({name:"PBKDF2", salt, iterations: DB.iter, hash:"SHA-256"}, k, 256);
-  return [...new Uint8Array(b)].map(v => v.toString(16).padStart(2, "0")).join("");
+async function go() {
+  const q = document.getElementById("q").value.trim().toUpperCase();
+  const out = document.getElementById("out");
+  out.style.display = "block";
+  document.getElementById("id").textContent = q;
+  document.getElementById("st").textContent = "Searching...";
+  try {
+    const text = await (await fetch(CSV)).text();
+    const rows = text.trim().split(/\r?\n/).map(l => l.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
+    const hit = rows.find(r => (r[ID_COL] || "").toUpperCase() === q);
+    document.getElementById("st").textContent = hit ? (hit[STATUS_COL] || "Found") : "Not found";
+  } catch (e) {
+    document.getElementById("st").textContent = "Error loading data";
+  }
 }
-
-async function search() {
-  $("err").textContent = ""; $("out").replaceChildren();
-  const id = $("id").value.trim().toUpperCase();
-  if (!DB) { $("err").textContent = "Data not loaded."; return; }
-  if (!/^A\d{6}$/.test(id)) { $("err").textContent = "ID format: A + 6 digits."; return; }
-  $("go").disabled = true;
-  const hit = DB.items[await hash(id)];
-  const c = document.createElement("div"); c.className = "res";
-  const n = document.createElement("span"); n.className = "n"; n.textContent = hit ? hit.n : "–";
-  const w = document.createElement("div");
-  const a = document.createElement("div"); a.className = "id"; a.textContent = id;
-  const s = document.createElement("div"); s.className = "st"; s.textContent = hit ? hit.status : "Not found";
-  const l = document.createElement("span"); l.className = "lock"; l.textContent = "🔒";
-  w.append(a, s); c.append(n, w, l); $("out").append(c);
-  $("go").disabled = false;
-}
-$("go").onclick = search;
-$("id").onkeydown = e => { if (e.key === "Enter") search(); };
+document.getElementById("q").onkeydown = e => { if (e.key === "Enter") go(); };
 </script>
 </body>
 </html>
