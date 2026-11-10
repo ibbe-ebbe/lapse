@@ -31,7 +31,6 @@ const CSV = "https://docs.google.com/spreadsheets/d/1n9g53Gs6vb_i5mU4XDMRuusjPHO
 const ID_COL = 3;      // column D
 const STATUS_COL = 1;  // column B (shown when found)
 
-const stamps = [];
 const qEl = document.getElementById("q");
 
 // allow only: A followed by up to 6 digits
@@ -50,13 +49,6 @@ async function go() {
     document.getElementById("st").textContent = "Enter ID like A123456";
     return;
   }
-  const now = Date.now();
-  while (stamps.length && now - stamps[0] > 60000) stamps.shift();
-  if (stamps.length >= 10) {
-    document.getElementById("st").textContent = "Too many searches. Wait " + Math.ceil((60000 - (now - stamps[0])) / 1000) + "s";
-    return;
-  }
-  stamps.push(now);
   document.getElementById("st").textContent = "Searching...";
   try {
     const text = await (await fetch(CSV)).text();
