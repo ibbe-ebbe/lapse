@@ -2,61 +2,74 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lapse Search</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PNC · Kulhudhuffushi Dhekunu Membership Drive 4 · Lapse Search</title>
 <style>
-body{margin:0;background:#fff;color:#111;font:16px system-ui,sans-serif}
-main{max-width:520px;margin:0 auto;padding:16px}
-h1{font-size:22px}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:#111;font:16px system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+main{max-width:520px;margin:0 auto;padding:20px 16px}
+.badge{display:inline-block;background:#111;color:#fff;font:700 13px system-ui;letter-spacing:.1em;padding:5px 12px;border-radius:999px}
+h1{font-size:22px;line-height:1.25;margin:14px 0 4px}
+.sub{color:#777;margin:0 0 20px}
+label{display:block;font-size:14px;color:#555;margin-bottom:6px}
 .row{display:flex;gap:8px}
-input{flex:1;min-width:0;font:20px monospace;text-transform:uppercase;padding:12px;border:1px solid #ddd;border-radius:12px}
-button{font:inherit;border:0;border-radius:12px;padding:12px 20px;background:#111;color:#fff}
-#out{margin-top:16px;padding:14px 16px;border:1px solid #eee;border-left:4px solid #111;border-radius:16px;display:none}
-#id{font:600 22px monospace}
-#st{color:#777}
+input{flex:1;min-width:0;font:22px ui-monospace,Menlo,monospace;text-transform:uppercase;padding:12px;border:1px solid #ddd;border-radius:12px;background:#fff;color:#111}
+input:focus{outline:2px solid #111;border-color:#111}
+button{font:inherit;border:0;border-radius:12px;padding:12px 20px;background:#111;color:#fff;cursor:pointer}
+.hint{color:#999;font-size:13px;margin-top:8px}
+#out{display:none;margin-top:20px;padding:16px;border:1px solid #eee;border-left:4px solid #111;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+#id{font:600 24px ui-monospace,Menlo,monospace}
+#st{color:#555;margin-top:2px}
+#out.bad{border-left-color:#c0392b}
+#out.bad #st{color:#c0392b}
+footer{margin-top:40px;color:#aaa;font-size:12px;text-align:center}
 </style>
 </head>
 <body>
 <main>
-<h1>Lapse Search</h1>
+<span class="badge">PNC</span>
+<h1>Kulhudhuffushi Dhekunu Membership Drive 4 Lapse Search</h1>
+<p class="sub">Check an ID number.</p>
+<label for="q">ID number</label>
 <div class="row">
-  <input id="q" maxlength="7" placeholder="A123456">
-  <button onclick="go()">Search</button>
+  <input id="q" maxlength="7" placeholder="A123456" inputmode="text" autocomplete="off" autocapitalize="characters">
+  <button type="button" onclick="go()">Search</button>
 </div>
+<div class="hint">Format: A followed by 6 digits</div>
 <div id="out"><div id="id"></div><div id="st"></div></div>
+<footer>PNC · Kulhudhuffushi Dhekunu</footer>
 </main>
 <script>
-// Published CSV link of your sheet tab (File > Share > Publish to web > CSV)
 const CSV = "https://docs.google.com/spreadsheets/d/1n9g53Gs6vb_i5mU4XDMRuusjPHODDa8CSm_p8wMHOyE/gviz/tq?tqx=out:csv";
 const ID_COL = 3;      // column D
-const STATUS_COL = 1;  // column B (shown when found)
+const SHOW_COL = 1;    // column B (shown when found)
+const $ = id => document.getElementById(id);
+const qEl = $("q");
 
-const qEl = document.getElementById("q");
-
-// allow only: A followed by up to 6 digits
 qEl.oninput = () => {
   const v = qEl.value.toUpperCase();
   const first = v[0] === "A" ? "A" : "";
   qEl.value = first + v.slice(first ? 1 : 0).replace(/\D/g, "").slice(0, 6);
 };
 
+function show(id, text, bad) {
+  $("out").style.display = "block";
+  $("out").className = bad ? "bad" : "";
+  $("id").textContent = id;
+  $("st").textContent = text;
+}
+
 async function go() {
   const q = qEl.value.trim().toUpperCase();
-  const out = document.getElementById("out");
-  out.style.display = "block";
-  document.getElementById("id").textContent = q;
-  if (!/^A\d{6}$/.test(q)) {
-    document.getElementById("st").textContent = "Enter ID like A123456";
-    return;
-  }
-  document.getElementById("st").textContent = "Searching...";
+  if (!/^A\d{6}$/.test(q)) return show(q || "–", "Enter ID like A123456", true);
+  show(q, "Searching...", false);
   try {
     const text = await (await fetch(CSV)).text();
     const rows = text.trim().split(/\r?\n/).map(l => l.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
     const hit = rows.find(r => (r[ID_COL] || "").toUpperCase() === q);
-    document.getElementById("st").textContent = hit ? (hit[STATUS_COL] || "Found") : "Not found";
+    hit ? show(q, hit[SHOW_COL] || "Found", false) : show(q, "Not found", true);
   } catch (e) {
-    document.getElementById("st").textContent = "Error loading data";
+    show(q, "Error loading data", true);
   }
 }
 qEl.onkeydown = e => { if (e.key === "Enter") go(); };
